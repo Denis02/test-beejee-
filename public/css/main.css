@@ -1,0 +1,7 @@
+table .image img{
+    max-width: 320px;
+    max-height: 240px;
+}
+table .text{
+    white-space: pre-wrap;
+}

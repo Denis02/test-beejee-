@@ -1,0 +1,17 @@
+# Запрет доступа
+<Files .*>
+	Order Deny,Allow
+	Deny From All
+</Files>
+
+# Принудительное задание кодировки
+AddDefaultCharset UTF-8
+
+# Запрет выдачи листинга каталога
+Options -Indexes
+
+# Редирект
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
