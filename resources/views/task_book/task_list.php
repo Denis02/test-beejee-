@@ -233,13 +233,11 @@
                 data: data,
                 dataType: 'json',
                 success: function(result) {
-                    console.log(result);
                     if(result['id'] == task_id){
                         text_el.text(new_text);
                         if(result['updated_at']){
                             let updated_text = 'отредактировано администратором ('+result['updated_at']+')';
                             let updated_el = text_el.parent().find('.alert');
-                            console.log(updated_el);
                             if(updated_el.length){
                                 updated_el.text(updated_text);
                             }else{
