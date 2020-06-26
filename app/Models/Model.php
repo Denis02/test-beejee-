@@ -55,13 +55,16 @@ class Model
      */
     public static function count(array $params = null) : int
     {
-        if ($params == null) {
-            $rows = self::getDb()->query("SELECT COUNT(*) as count FROM ".static::$table)->fetchColumn();
+        $result = 0;
+        if (empty($params)) {
+            $result = self::getDb()->query("SELECT COUNT(*) as count FROM ".static::$table)->fetchColumn();
         } else {
-            $where_str = static::convertParamsToString($params);
-            $rows = self::getDb()->query("SELECT COUNT(*) as count FROM " .static::$table . $where_str)->fetchColumn();
+            $where = static::convertParamsToQuery($params);
+            $query = self::getDb()->prepare("SELECT COUNT(*) as count FROM " . static::$table . $where['str']);
+            if(!empty($where['data']) && $query->execute($where['data']))
+                $result = $query->fetchColumn();
         }
-        return $rows;
+        return $result;
     }
 
     /**
@@ -91,19 +94,24 @@ class Model
             if($column != null){
                 $sort_str = $desk ? " ORDER BY $column DESC " : " ORDER BY $column ";
             }
-            $where_str = '';
-            if(!empty($params) && is_array($params)){
-                $where_str = static::convertParamsToString($params);
-            }
-            $items = self::getDb()->query("SELECT * FROM " . static::$table . $where_str . $sort_str . $limit_str)->fetchAll();
-            $model = 'Models\\'.static::$model;
-            if(class_exists($model)){
-                // возвращает массив обЪектов модели
-                foreach ($items as $item) {
-                    $result[] = new $model($item);
+
+            if (empty($params)) {
+                $result = self::getDb()->query("SELECT * FROM " . static::$table . $sort_str . $limit_str)->fetchAll();
+            } else {
+                $where = static::convertParamsToQuery($params);
+                $query = self::getDb()->prepare("SELECT * FROM " . static::$table . $where['str'] . $sort_str . $limit_str);
+                if (!empty($where['data']) && $query->execute($where['data'])) {
+                    $items = $query->fetchAll();
+                    $model = 'Models\\' . static::$model;
+                    if (class_exists($model)) {
+                        // возвращает массив обЪектов модели
+                        foreach ($items as $item) {
+                            $result[] = new $model($item);
+                        }
+                    } else {
+                        $result = $items;
+                    }
                 }
-            }else{
-                $result = $items;
             }
         }
         return $result;
@@ -134,22 +142,18 @@ class Model
     protected static function insert(array $data) : ?int
     {
         if(empty($data)) return null;
-        $fields_str = '';
-        $values_str = '';
+        $query_fields = '';
+        $query_values = '';
+        $query_data = [];
         foreach ($data as $key => $val){
-            if(is_null($val)) continue;
-            if(!empty($fields_str)) $fields_str .= ', ';
-            if(!empty($values_str)) $values_str .= ', ';
-            $fields_str .= "`$key`";
-            if(is_bool($val)){
-                $values_str .= $val ? 1 : 0;
-            }elseif (is_string($val)){
-                $values_str .= self::getDb()->quote($val);
-            }else{
-                $values_str .= $val;
-            }
+            if(is_null($val) || is_array($val) || is_object($val)) continue;
+            if(!empty($query_fields)) $query_fields .= ', ';
+            if(!empty($query_values)) $query_values .= ', ';
+            $query_fields .= "`$key`";
+            $query_values .= ":$key";
+            $query_data[":$key"] = is_bool($val) ? (int)$val : $val;
         }
-        if($res=self::getDb()->query("INSERT INTO ".static::$table." ($fields_str) VALUES ($values_str)")){
+        if(self::getDb()->prepare("INSERT INTO ".static::$table." ($query_fields) VALUES ($query_values)")->execute($query_data)){
             return self::getDb()->lastInsertId();
         }
         return null;
@@ -166,19 +170,15 @@ class Model
     {
         if(empty($data) || !static::getById($id))
             return false;
-        $data_str = '';
+        $query_str = '';
+        $query_data = [];
         foreach ($data as $key => $val){
-            if(is_null($val)) continue;
-            if(!empty($data_str)) $data_str .= ', ';
-            $_val = $val;
-            if(is_bool($val)){
-                $_val = $val ? 1 : 0;
-            }elseif (is_string($val)){
-                $_val = self::getDb()->quote($val);
-            }
-            $data_str .= "`$key` = $_val";
+            if(is_null($val) || is_array($val) || is_object($val)) continue;
+            if(!empty($query_str)) $query_str .= ', ';
+            $query_str .= "`$key` = :$key";
+            $query_data[":$key"] = is_bool($val) ? (int)$val : $val;
         }
-        if(self::getDb()->query("UPDATE ".static::$table." SET $data_str WHERE id = $id")){
+        if(self::getDb()->prepare("UPDATE ".static::$table." SET $query_str WHERE id = $id")->execute($query_data)){
             return true;
         }
         return false;
@@ -204,36 +204,35 @@ class Model
      * @param array $params параметры для формирования условий оператора WHERE
      * @return string строка условий с оператором WHERE
      */
-    private static function convertParamsToString(array $params) : string
+    private static function convertParamsToQuery(array $params) : array
     {
-        $result = '';
+        $result = ['str' => '', 'data' => []];
         $param_str = '';
         $search_str = '';
         foreach ($params as $key => $val){
             if($key == '_SEARCH_'){
                 if(is_array($val)){
                     foreach ($val as $s_key => $s_val){
+                        if(is_null($s_val) || is_array($s_val) || is_object($s_val)) continue;
                         if(!empty($search_str)) $search_str .= " or ";
-                        $search_str .= " `$s_key` like " . self::getDb()->quote("%$s_val%") . " ";
+                        $data_key = ":s_$s_key";
+                        $search_str .= " `$s_key` like $data_key ";
+                        $result['data'][$data_key] = "%$s_val%";
                     }
                 }
                 continue;
             };
+            if(is_null($val) || is_array($val) || is_object($val)) continue;
             if(!empty($param_str)) $param_str .= ', ';
-            $_val = $val;
-            if(is_bool($val)){
-                $_val = $val ? 1 : 0;
-            }elseif (is_string($val)){
-                $_val = self::getDb()->quote($val);
-            }
-            $param_str .= "`$key` = $_val";
+            $param_str .= "`$key` = :$key";
+            $result['data'][":$key"] = is_bool($val) ? (int)$val : $val;
         }
         if(!empty($param_str) && !empty($search_str)){
-            $result = " WHERE ($param_str) and ($search_str) ";
+            $result['str'] = " WHERE ($param_str) and ($search_str) ";
         }elseif (!empty($param_str)){
-            $result = " WHERE ($param_str) ";
+            $result['str'] = " WHERE ($param_str) ";
         }elseif (!empty($search_str)){
-            $result = " WHERE ($search_str) ";
+            $result['str'] = " WHERE ($search_str) ";
         }
         return $result;
     }

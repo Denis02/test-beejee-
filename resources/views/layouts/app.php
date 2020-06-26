@@ -13,7 +13,9 @@
     <script src="/js/jquery_3.3.1.js" type="text/javascript"></script>
     <script src="/js/dataTables_1.10.20.js" type="text/javascript"></script>
     <script src="/js/bootstrap_4.1.3.js" type="text/javascript"></script>
-
+    <script>
+        var is_admin = <?= (int)auth() ?>;
+    </script>
 </head>
 
 <body>

@@ -1,3 +1,12 @@
 table .text{
     white-space: pre-wrap;
 }
+
+#task_list,
+#taskPreviewModal .table{
+    width: 100%;
+}
+#taskPreviewModal .modal-dialog-lg,
+#taskPreviewModal .modal-content{
+    height: 100%;
+}

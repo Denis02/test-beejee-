@@ -26,6 +26,22 @@ function view(string $content, array $data = null, string $layout='app'){
     exit();
 }
 
+// Глобальная функция для подключения js файлов
+function include_js(string $src)
+{
+    $file = RESOURCES_DIR.'js/'.$src.'.js';
+    if(file_exists($file))
+    {
+        ob_start();
+        include_once $file;
+        $content = ob_get_clean();
+        echo '<script type="text/javascript" >'.$content.'</script>';
+        return true;
+    }
+    echo "<!-- Unable to load " . $src . ".js -->";
+    return false;
+}
+
 // Глобальная функция для Ajax ответа
 function json_response($data, int $code = null){
     header('Content-type: application/json');
